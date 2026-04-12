@@ -151,24 +151,41 @@ def run_agent():
     # 加载 Skill 作为系统提示
     skill_content = load_skill()
 
-    system_prompt = f"""你是一个严格按照以下 Skill 文档执行的 AI Agent。
+    system_prompt = f"""你是「情绪意境海报生成器」，一个专门将用户心情转化为中式水墨意境海报的 AI 助手。
 
-Skill 文档内容如下：
+你的完整 Skill 定义如下：
 
 {skill_content}
 
 ---
 
-执行要求：
-1. 严格按照 Skill 定义的六步工作流执行，不可跳过任何步骤
-2. 步骤1：主动询问用户的心情，等待用户回复后再进入步骤2
-3. 步骤2-4：完成情绪提取、价值提炼、模块拆分（内部处理，不需要全部输出给用户）
-4. 步骤5：向用户完整输出「情绪诊断报告」和「完整生图 Prompt」
-   - 生图 Prompt 必须用 ```plaintext ... ``` 代码块包裹
-   - Prompt 必须是填充了所有变量的实体版本，不能有任何未替换的 {{变量}}
-5. 步骤6：询问用户确认后，告知"即将调用万相2.7生成图像"
+## 对话行为规范
 
-语言：全程使用中文与用户交流，Prompt 内容保持英文。"""
+**第一句话：** 简短介绍自己，然后问用户现在心情怎么样。例如：
+「你好，我是情绪意境海报生成器，把你此刻的心情变成一张专属的水墨意境图。你现在心情怎么样？」
+
+**收集信息阶段：**
+- 用户回复后，判断信息是否足够完成六层情绪诊断
+- 如果信息不够（太短/太模糊），自然地追问1-2个问题，例如询问是什么事情引起的、大概是什么感觉
+- 如果信息已经足够，不要再追问，直接进入生图流程
+- **最多只问2轮追加问题**，之后无论如何都进入生图流程
+
+**生图触发：**
+- 当信息足够时，回复一句话告知用户「正在为你生成专属海报，稍等一下～」
+- **然后立刻在回复末尾输出完整的生图 Prompt**，格式如下（必须严格遵守）：
+
+```plaintext
+Create a Chinese ink-wash...（完整Prompt内容）
+```
+
+**生图 Prompt 要求：**
+- 必须是完全填充好的实体 Prompt，不能有任何 {{变量}} 占位符
+- 必须包含 === CRITICAL STYLE REQUIREMENTS (MUST FOLLOW EXACTLY) === 这行
+- 必须包含所有8个段落：OVERALL VISUAL CONCEPT / COLOR SYSTEM / LAYOUT & STRUCTURE / GRAPHIC ELEMENTS / MODULE REQUIREMENTS / TYPOGRAPHY STYLE / WHAT TO AVOID / CONTENT FOR THIS IMAGE
+- 所有 7 个模块内容必须填充完整
+
+**全程语言：** 中文与用户交流，Prompt 内容保持英文。
+**风格：** 温柔、简洁，像一个懂你心情的朋友，不要说废话。"""
 
     messages = []
     image_generated = False
@@ -183,7 +200,7 @@ Skill 文档内容如下：
         if not messages:
             print("\n🤖 Agent 正在启动...\n")
             # Qwen 要求首条必须是 user，用内部启动指令触发
-            messages.append({"role": "user", "content": "[系统启动] 请按照 Skill 文档的步骤1，主动向用户询问心情。"})
+            messages.append({"role": "user", "content": "[系统启动] 请按照你的角色定位，用一句话介绍自己，然后询问用户现在心情怎么样。回复要简短温柔。"})
             reply = call_llm(messages, system_prompt)
             if not reply:
                 break
@@ -215,36 +232,29 @@ Skill 文档内容如下：
         messages.append({"role": "assistant", "content": reply})
         print(f"🤖 Agent：{reply}\n")
 
-        # ── 检测是否包含完整生图 Prompt，触发生图
+        # ── 检测是否包含完整生图 Prompt，直接触发生图（无需手动确认）
         if not image_generated:
             image_prompt = extract_image_prompt(reply)
             if image_prompt:
-                print("─" * 50)
-                print("📋 检测到完整生图 Prompt，等待你确认后生图")
-                print("─" * 50)
-                confirm = input("👤 确认生图？(y/n)：").strip().lower()
-                if confirm in ("y", "yes", "是", "确认", "好", "ok"):
-                    # 从 Prompt 中提取情绪标题作为文件名
-                    title_match = re.search(r"Main Emotion Title:\s*(.+)", image_prompt)
-                    title = title_match.group(1).strip() if title_match else "output"
-                    filename = f"agent-{title}.png"
+                # 提取情绪标题作为文件名
+                title_match = re.search(r"Main Emotion Title:\s*(.+)", image_prompt)
+                title = title_match.group(1).strip() if title_match else "output"
+                filename = f"agent-{title}.png"
 
-                    out_path = generate_image(image_prompt, filename)
-                    if out_path:
-                        print(f"\n✅ 海报生成完成：{out_path}")
-                        image_generated = True
+                out_path = generate_image(image_prompt, filename)
+                if out_path:
+                    print(f"\n✅ 你的专属海报已生成：{out_path}\n")
+                    image_generated = True
 
-                        # 告知 Agent 已生图，进入收尾
-                        messages.append({
-                            "role": "user",
-                            "content": f"图片已生成，保存路径：{out_path}"
-                        })
-                        closing = call_llm(messages, system_prompt)
-                        if closing:
-                            messages.append({"role": "assistant", "content": closing})
-                            print(f"\n🤖 Agent：{closing}\n")
-                else:
-                    print("⏸ 已取消生图，你可以继续调整\n")
+                    # 告知 Agent 生图完成，输出收尾语
+                    messages.append({
+                        "role": "user",
+                        "content": "图片已经生成好了"
+                    })
+                    closing = call_llm(messages, system_prompt)
+                    if closing:
+                        messages.append({"role": "assistant", "content": closing})
+                        print(f"🤖 Agent：{closing}\n")
 
 
 if __name__ == "__main__":
