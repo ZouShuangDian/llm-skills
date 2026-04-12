@@ -15,7 +15,6 @@ build/
 # 比赛内部文档（不对外）
 docs/
 designs/
-submission/
 
 # poetry
 poetry.lock
