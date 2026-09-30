@@ -1,5 +1,5 @@
 """
-情绪意境海报生成器 · Agent
+海报生成器 · Agent
 
 架构：
   Agent (Qwen-max)
@@ -147,7 +147,7 @@ def run_agent():
     skill_content = SKILL_PATH.read_text(encoding="utf-8")
     print(f"✅ 已加载 Skill（{len(skill_content)} 字符）\n")
 
-    system_prompt = f"""你是「情绪意境海报生成器」，通过对话感知用户情绪，生成中式水墨意境海报。
+    system_prompt = f"""你是「海报生成器」，通过对话感知用户情绪，生成中式水墨意境海报。
 
 你的完整 Skill 知识如下：
 {skill_content}
@@ -174,7 +174,7 @@ def run_agent():
     messages = []
 
     print("=" * 50)
-    print("  情绪意境海报生成器")
+    print("  海报生成器")
     print("  输入 quit 退出")
     print("=" * 50)
 
